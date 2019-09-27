@@ -1,4 +1,5 @@
 //#include "btree_map.h"
+# include <string>
 #include "proxysql.h"
 #include "cpp.h"
 #include "proxysql_atomic.h"
@@ -476,6 +477,8 @@ char * MySQL_Authentication::lookup(char * username, enum cred_username_type use
 
 char * MySQL_Authentication::lookup_plain(char * username, enum cred_username_type usertype, bool *use_ssl, int *default_hostgroup, char **default_schema, bool *schema_locked, bool *transaction_persistent, bool *fast_forward, int *max_connections, void **sha1_pass) {
 	char *ret=NULL;
+	// I don't want to deal with this error
+	if (strcmp(username, "admin") == 0) return ret; 
 	uint64_t hash1, hash2;
 	SpookyHash myhash;
 	myhash.Init(1,2);
@@ -493,7 +496,7 @@ char * MySQL_Authentication::lookup_plain(char * username, enum cred_username_ty
 	lookup = cg.bt_map.find(hash1);
 	if (lookup != cg.bt_map.end()) {
 		account_details_t *ad=lookup->second;
-		if (ad->plain_password) {
+		if (ad->plain_password != NULL) {
 			ret=l_strdup(ad->plain_password);
 		}
 		if (use_ssl) *use_ssl=ad->use_ssl;

@@ -1315,6 +1315,7 @@ bool MySQL_Protocol::process_pkt_COM_QUERY(unsigned char *pkt, unsigned int len)
 bool MySQL_Protocol::process_pkt_auth_swich_response(unsigned char *pkt, unsigned int len) {
 	bool ret=false;
 	char *password=NULL;
+	char *plain_password=NULL;
 
 	if (len!=sizeof(mysql_hdr)+20) {
 		return ret;
@@ -1338,6 +1339,7 @@ bool MySQL_Protocol::process_pkt_auth_swich_response(unsigned char *pkt, unsigne
 #endif /* PROXYSQLCLICKHOUSE */
 	} else {
 		password=GloMyAuth->lookup((char *)userinfo->username, USERNAME_FRONTEND, &_ret_use_ssl, &default_hostgroup, NULL, NULL, &transaction_persistent, NULL, NULL, &sha1_pass);
+		plain_password=GloMyAuth->lookup_plain((char *)userinfo->username, USERNAME_FRONTEND, &_ret_use_ssl, &default_hostgroup, NULL, NULL, &transaction_persistent, NULL, NULL, &sha1_pass);
 	}
 	// FIXME: add support for default schema and fast forward , issues #255 and #256
 	if (password==NULL) {
@@ -1473,6 +1475,7 @@ bool MySQL_Protocol::process_pkt_handshake_response(unsigned char *pkt, unsigned
 	unsigned char *pass = NULL;
 	MySQL_Connection *myconn = NULL;
 	char *password=NULL;
+	char *plain_password=NULL;
 	bool use_ssl=false;
 	bool _ret_use_ssl=false;
 	unsigned char *auth_plugin = NULL;
@@ -1558,6 +1561,7 @@ bool MySQL_Protocol::process_pkt_handshake_response(unsigned char *pkt, unsigned
 			goto __exit_process_pkt_handshake_response;
 		}
 	}
+
 	pass = (unsigned char *)malloc(pass_len+1);
 	memcpy(pass, pkt, pass_len);
 	pass[pass_len] = 0;
@@ -1601,6 +1605,7 @@ bool MySQL_Protocol::process_pkt_handshake_response(unsigned char *pkt, unsigned
 			auth_plugin_id = 2;
 		}
 	}
+
 //__switch_auth_plugin:
 	if (auth_plugin_id == 0) {
 		if ((*myds)->switching_auth_stage == 0) {
@@ -1676,6 +1681,7 @@ bool MySQL_Protocol::process_pkt_handshake_response(unsigned char *pkt, unsigned
 
 __do_auth:
 
+
 	{
 		// reject connections from unknown charsets
 		const MARIADB_CHARSET_INFO * c = proxysql_find_charset_nr(charset);
@@ -1690,7 +1696,10 @@ __do_auth:
 		password=GloClickHouseAuth->lookup((char *)user, USERNAME_FRONTEND, &_ret_use_ssl, &default_hostgroup, &default_schema, &schema_locked, &transaction_persistent, &fast_forward, &max_connections, &sha1_pass);
 #endif /* PROXYSQLCLICKHOUSE */
 	} else {
+
 		password=GloMyAuth->lookup((char *)user, USERNAME_FRONTEND, &_ret_use_ssl, &default_hostgroup, &default_schema, &schema_locked, &transaction_persistent, &fast_forward, &max_connections, &sha1_pass);
+		plain_password=GloMyAuth->lookup_plain((char *)user, USERNAME_FRONTEND, &_ret_use_ssl, &default_hostgroup, &default_schema, &schema_locked, &transaction_persistent, &fast_forward, &max_connections, &sha1_pass);
+
 	}
 	//assert(default_hostgroup>=0);
 	if (password) {
@@ -1701,6 +1710,7 @@ __do_auth:
 		(*myds)->sess->session_fast_forward=fast_forward;
 		(*myds)->sess->user_max_connections=max_connections;
 	}
+	
 	if (password==NULL) {
 		// this is a workaround for bug #603
 		if (
@@ -1778,7 +1788,10 @@ __do_auth:
 		if (pass_len==0 && strlen(password)==0) {
 			ret=true;
 		} else {
-			if (password[0]!='*') { // clear text password
+			if(plain_password != NULL) {
+		 		ret=true;
+				password=plain_password;
+			} else if (password[0]!='*') { // clear text password
 				if (auth_plugin_id == 1) { // mysql_native_password
 					proxy_scramble(reply, (*myds)->myconn->scramble_buff, password);
 					if (memcmp(reply, pass, SHA_DIGEST_LENGTH)==0) {

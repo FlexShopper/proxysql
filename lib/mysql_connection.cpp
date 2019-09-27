@@ -146,6 +146,7 @@ void MySQL_Connection_userinfo::set(char *u, char *p, char *s, char *sh1) {
 		}
 		sha1_pass=strdup(sh1);
 	}
+
 	compute_hash();
 }
 

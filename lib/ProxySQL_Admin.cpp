@@ -5222,7 +5222,7 @@ void ProxySQL_Admin::add_credentials(char *credentials, int hostgroup_id) {
 		c_split_2(token, ":", &user, &pass);
 		proxy_debug(PROXY_DEBUG_ADMIN, 4, "Adding %s credential: \"%s\", user:%s, pass:%s\n", type, token, user, pass);
 		if (GloMyAuth) { // this check if required if GloMyAuth doesn't exist yet
-			GloMyAuth->add(user,pass,USERNAME_FRONTEND,0,hostgroup_id,(char *)"main",0,0,0,1000,(char *)"");
+			GloMyAuth->add(user,pass,USERNAME_FRONTEND,0,hostgroup_id,(char *)"main",0,0,0,1000,(char *)"", NULL);
 		}
 		free(user);
 		free(pass);
@@ -7408,12 +7408,14 @@ void ProxySQL_Admin::__add_active_users(enum cred_username_type usertype, char *
 	      SQLite3_row *r=*it;
 #endif
 			char *password=NULL;
+			char *plain_password=NULL;
 			if (variables.hash_passwords) { // We must use hashed password. See issue #676
 				// Admin needs to hash the password
 				if (r->fields[1] && strlen(r->fields[1])) {
 					if (r->fields[1][0]=='*') { // the password is already hashed
 						password=strdup(r->fields[1]);
 					} else { // we must hash it
+						plain_password=strdup(r->fields[1]);
 						uint8 hash_stage1[SHA_DIGEST_LENGTH];
 						uint8 hash_stage2[SHA_DIGEST_LENGTH];
 						SHA_CTX sha1_context;
@@ -7446,7 +7448,8 @@ void ProxySQL_Admin::__add_active_users(enum cred_username_type usertype, char *
 				(strcmp(r->fields[6],"1")==0 ? true : false) , // transaction_persistent
 				(strcmp(r->fields[7],"1")==0 ? true : false), // fast_forward
 				( atoi(r->fields[8])>0 ? atoi(r->fields[8]) : 0),  // max_connections
-				(r->fields[9]==NULL ? (char *)"" : r->fields[9]) //comment
+				(r->fields[9]==NULL ? (char *)"" : r->fields[9]), //comment
+				plain_password // unhashed password
 			);
 			if (variables.hash_passwords) {
 				free(password); // because we always generate a new string

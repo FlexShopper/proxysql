@@ -76,13 +76,14 @@ __loop_remove_inactives:
 #endif
 }
 
-bool MySQL_Authentication::add(char * username, char * password, enum cred_username_type usertype, bool use_ssl, int default_hostgroup, char *default_schema, bool schema_locked, bool transaction_persistent, bool fast_forward, int max_connections, char *comment) {
+bool MySQL_Authentication::add(char * username, char * password, enum cred_username_type usertype, bool use_ssl, int default_hostgroup, char *default_schema, bool schema_locked, bool transaction_persistent, bool fast_forward, int max_connections, char *comment, char * plain_password) {
 	uint64_t hash1, hash2;
 	SpookyHash myhash;
 	myhash.Init(1,2);
 	myhash.Update(username,strlen(username));
 	myhash.Final(&hash1,&hash2);
 
+	
 	creds_group_t &cg=(usertype==USERNAME_BACKEND ? creds_backends : creds_frontends);
 	
 #ifdef PROXYSQL_AUTH_PTHREAD_MUTEX
@@ -114,10 +115,13 @@ bool MySQL_Authentication::add(char * username, char * password, enum cred_usern
 			ad->comment=strdup(comment);
 		}
   } else {
-		ad=(account_details_t *)malloc(sizeof(account_details_t));
+		ad=(account_details_t *)malloc(sizeof(account_details_t) + 1);
 		ad->username=strdup(username);
 		ad->default_schema=strdup(default_schema);
 		ad->comment=strdup(comment);
+		if (plain_password) {
+			ad->plain_password=strdup(plain_password);
+		}
 		ad->password=strdup(password);
 		new_ad=true;
 		ad->sha1_pass=NULL;
@@ -159,6 +163,7 @@ unsigned int MySQL_Authentication::memory_usage() {
 		ret += sizeof(account_details_t);
 		if (ado->username) ret += strlen(ado->username) + 1;
 		if (ado->password) ret += strlen(ado->password) + 1;
+		if (ado->plain_password) ret += strlen(ado->plain_password) + 1;
 		if (ado->sha1_pass) ret += SHA_DIGEST_LENGTH;
 		if (ado->default_schema) ret += strlen(ado->default_schema) + 1;
 		if (ado->comment) ret += strlen(ado->comment) + 1;
@@ -171,6 +176,7 @@ unsigned int MySQL_Authentication::memory_usage() {
 		ret += sizeof(account_details_t);
 		if (ado->username) ret += strlen(ado->username) + 1;
 		if (ado->password) ret += strlen(ado->password) + 1;
+		if (ado->plain_password) ret += strlen(ado->plain_password) + 1;
 		if (ado->sha1_pass) ret += SHA_DIGEST_LENGTH;
 		if (ado->default_schema) ret += strlen(ado->default_schema) + 1;
 		if (ado->comment) ret += strlen(ado->comment) + 1;
@@ -445,6 +451,51 @@ char * MySQL_Authentication::lookup(char * username, enum cred_username_type use
 	if (lookup != cg.bt_map.end()) {
 		account_details_t *ad=lookup->second;
 		ret=l_strdup(ad->password);
+		if (use_ssl) *use_ssl=ad->use_ssl;
+		if (default_hostgroup) *default_hostgroup=ad->default_hostgroup;
+		if (default_schema) *default_schema=l_strdup(ad->default_schema);
+		if (schema_locked) *schema_locked=ad->schema_locked;
+		if (transaction_persistent) *transaction_persistent=ad->transaction_persistent;
+		if (fast_forward) *fast_forward=ad->fast_forward;
+		if (max_connections) *max_connections=ad->max_connections;
+		if (sha1_pass) {
+			if (ad->sha1_pass) {
+				*sha1_pass=malloc(SHA_DIGEST_LENGTH);
+				memcpy(*sha1_pass,ad->sha1_pass,SHA_DIGEST_LENGTH);
+			}
+		}
+	}
+#ifdef PROXYSQL_AUTH_PTHREAD_MUTEX
+	pthread_rwlock_unlock(&cg.lock);
+#else
+	spin_rdunlock(&cg.lock);
+#endif
+	return ret;
+
+}
+
+char * MySQL_Authentication::lookup_plain(char * username, enum cred_username_type usertype, bool *use_ssl, int *default_hostgroup, char **default_schema, bool *schema_locked, bool *transaction_persistent, bool *fast_forward, int *max_connections, void **sha1_pass) {
+	char *ret=NULL;
+	uint64_t hash1, hash2;
+	SpookyHash myhash;
+	myhash.Init(1,2);
+	myhash.Update(username,strlen(username));
+	myhash.Final(&hash1,&hash2);
+
+	creds_group_t &cg=(usertype==USERNAME_BACKEND ? creds_backends : creds_frontends);
+
+#ifdef PROXYSQL_AUTH_PTHREAD_MUTEX
+	pthread_rwlock_rdlock(&cg.lock);
+#else
+	spin_rdlock(&cg.lock);
+#endif
+	std::map<uint64_t, account_details_t *>::iterator lookup;
+	lookup = cg.bt_map.find(hash1);
+	if (lookup != cg.bt_map.end()) {
+		account_details_t *ad=lookup->second;
+		if (ad->plain_password) {
+			ret=l_strdup(ad->plain_password);
+		}
 		if (use_ssl) *use_ssl=ad->use_ssl;
 		if (default_hostgroup) *default_hostgroup=ad->default_hostgroup;
 		if (default_schema) *default_schema=l_strdup(ad->default_schema);

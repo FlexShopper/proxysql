@@ -11,6 +11,7 @@
 typedef struct _account_details_t {
 	char *username;
 	char *password;
+	char *plain_password;
 	void *sha1_pass;
 	bool use_ssl;
 	int default_hostgroup;
@@ -61,12 +62,13 @@ class MySQL_Authentication {
 	public:
 	MySQL_Authentication();
 	~MySQL_Authentication();
-	bool add(char *username, char *password, enum cred_username_type usertype, bool use_ssl, int default_hostgroup, char *default_schema, bool schema_locked, bool transaction_persistent, bool fast_forward, int max_connections, char *comment);
+	bool add(char *username, char *password, enum cred_username_type usertype, bool use_ssl, int default_hostgroup, char *default_schema, bool schema_locked, bool transaction_persistent, bool fast_forward, int max_connections, char *comment, char *plain_password);
 	bool del(char *username, enum cred_username_type usertype, bool set_lock=true);
 	bool reset();
 	void print_version();
 	bool exists(char *username);
 	char * lookup(char *username, enum cred_username_type usertype, bool *use_ssl, int *default_hostgroup, char **default_schema, bool *schema_locked, bool *transaction_persistent, bool *fast_forward, int *max_connections, void **sha1_pass);
+	char * lookup_plain(char *username, enum cred_username_type usertype, bool *use_ssl, int *default_hostgroup, char **default_schema, bool *schema_locked, bool *transaction_persistent, bool *fast_forward, int *max_connections, void **sha1_pass);
 	int dump_all_users(account_details_t ***, bool _complete=true);
 	int increase_frontend_user_connections(char *username, int *mc=NULL);
 	void decrease_frontend_user_connections(char *username);

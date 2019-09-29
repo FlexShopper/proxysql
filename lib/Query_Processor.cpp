@@ -1,6 +1,7 @@
 #include <iostream>     // std::cout
 #include <algorithm>    // std::sort
 #include <vector>       // std::vector
+#include <regex> 	// std:regex
 #include "re2/re2.h"
 #include "re2/regexp.h"
 #include "proxysql.h"
@@ -1740,6 +1741,7 @@ __internal_loop:
 			}
 		}
 		// match on query
+		proxy_error("Matching on query: %s\n%s\n", qr->match_pattern, ret->new_query);
 		re2p=(re2_t *)qr->regex_engine2;
 		if (qr->match_pattern) {
 			bool rc;
@@ -1862,21 +1864,30 @@ __internal_loop:
 
 		if (qr->replace_pattern) {
 			proxy_debug(PROXY_DEBUG_MYSQL_QUERY_PROCESSOR, 5, "query rule %d on match_pattern \"%s\" has a replace_pattern \"%s\" to apply\n", qr->rule_id, qr->match_pattern, qr->replace_pattern);
-			if (ret->new_query==NULL) ret->new_query=new std::string(query);
+			std::regex find_re("\"([^\"]+)\"(\\.|\\s)\"([^\"]+)\"");
+			std::string replacement_fmt = "$1$2$3";
+			std::string replaced_query = query;
+			replaced_query = std::regex_replace(replaced_query, find_re, replacement_fmt);
+			ret->new_query = new std::string(replaced_query);
+			proxy_error("This is the result: %s\n", replaced_query);
 			re2_t *re2p=(re2_t *)qr->regex_engine2;
 			if (re2p->re2) {
+				proxy_error("In the RE2 context\n");
 				//RE2::Replace(ret->new_query,qr->match_pattern,qr->replace_pattern);
 				if ((qr->re_modifiers & QP_RE_MOD_GLOBAL) == QP_RE_MOD_GLOBAL) {
-					re2p->re2->GlobalReplace(ret->new_query,qr->match_pattern,qr->replace_pattern);
+					proxy_error("We are here replacing stuff\n");
+					//re2p->re2->GlobalReplace(ret->new_query,qr->match_pattern,qr->replace_pattern);
 				} else {
-					re2p->re2->Replace(ret->new_query,qr->match_pattern,qr->replace_pattern);
+					//re2p->re2->Replace(ret->new_query,qr->match_pattern,qr->replace_pattern);
 				}
 			} else {
 				//re2p->re1->Replace(ret->new_query,qr->replace_pattern);
 				if ((qr->re_modifiers & QP_RE_MOD_GLOBAL) == QP_RE_MOD_GLOBAL) {
-					re2p->re1->GlobalReplace(qr->replace_pattern,ret->new_query);
+					proxy_error("This is the query: %s\ntest\n%s\n", ret->new_query->c_str(), query);
+					//re2p->re1->GlobalReplace(qr->replace_pattern,ret->new_query);
 				} else {
-					re2p->re1->Replace(qr->replace_pattern,ret->new_query);
+					proxy_error("This might also be the query? %s\n%s\n", ret->new_query, query);
+					//re2p->re1->Replace(qr->replace_pattern,ret->new_query);
 				}
 			}
 		}
